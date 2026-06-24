@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JobGuard AI — Fake Job Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Space+Mono&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-brand">
+      <span class="nav-logo">⬡</span>
+      <span class="nav-name">JobGuard<span class="accent">AI</span></span>
+    </div>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#demo" class="btn-nav">Try Now →</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">🛡️ Built for Fresh Graduates &amp; Job Seekers</div>
+    <h1 class="hero-title">
+      Is That Job Listing<br/>
+      <span class="hero-highlight">Real or a Scam?</span>
+    </h1>
+    <p class="hero-sub">
+      Paste any job posting. Our AI analyzes NLP patterns, company legitimacy,
+      and 20+ red flags in seconds — so you never fall for a fake offer again.
+    </p>
+    <div class="hero-stats">
+      <div class="stat"><span class="stat-num">1 in 7</span><span class="stat-label">online jobs are fake</span></div>
+      <div class="stat-div"></div>
+      <div class="stat"><span class="stat-num">$500M+</span><span class="stat-label">lost to job scams yearly</span></div>
+      <div class="stat-div"></div>
+      <div class="stat"><span class="stat-num">94%</span><span class="stat-label">detection accuracy</span></div>
+    </div>
+    <a href="#demo" class="btn-hero">Scan a Job Posting Free →</a>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how" id="how">
+    <p class="section-eyebrow">The Engine</p>
+    <h2 class="section-title">Three Layers of AI Protection</h2>
+    <div class="how-grid">
+      <div class="how-card">
+        <div class="how-icon">🧠</div>
+        <h3>NLP Analysis</h3>
+        <p>Scans writing style, urgency language, vague promises, and grammatical red flags that signal deceptive postings.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon">🏢</div>
+        <h3>Company Validation</h3>
+        <p>Cross-checks company name, domain, LinkedIn presence, and registration data against known legitimate employers.</p>
+      </div>
+      <div class="how-card">
+        <div class="how-icon">🔍</div>
+        <h3>Pattern Detection</h3>
+        <p>Identifies 20+ suspicious signals: wire transfer requests, Gmail recruiters, "work from home" bait-and-switch, upfront fees.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section class="demo" id="demo">
+    <p class="section-eyebrow">Live Scanner</p>
+    <h2 class="section-title">Paste Any Job. Get Instant Truth.</h2>
+    <p class="section-sub">Try a suspicious-looking job posting or use our pre-loaded examples.</p>
+
+    <div class="example-btns">
+      <button class="example-btn" onclick="loadExample('scam')">⚠️ Load Scam Example</button>
+      <button class="example-btn" onclick="loadExample('legit')">✅ Load Legit Example</button>
+      <button class="example-btn" onclick="loadExample('suspicious')">🟡 Load Suspicious Example</button>
+    </div>
+
+    <div class="scanner-layout">
+      <!-- LEFT: Input -->
+      <div class="scanner-input-panel">
+        <label class="panel-label">
+          <span>📋 Paste Job Description</span>
+          <span class="char-count" id="charCount">0 / 5000</span>
+        </label>
+        <textarea
+          id="jobInput"
+          class="job-textarea"
+          maxlength="5000"
+          placeholder="Paste the full job listing here...
+
+Include:
+• Job title and company name
+• Job description and requirements
+• Salary/compensation details
+• Application instructions
+• Contact information
+
+The more you paste, the more accurate the analysis."
+          oninput="updateCharCount()"
+        ></textarea>
+        <button class="btn-scan" id="scanBtn" onclick="analyzeJob()">
+          <span id="scanBtnText">🔍 Analyze Job Posting</span>
+        </button>
+      </div>
+
+      <!-- RIGHT: Results -->
+      <div class="scanner-result-panel" id="resultPanel">
+        <div class="result-placeholder" id="resultPlaceholder">
+          <div class="placeholder-icon">⬡</div>
+          <p>Analysis results will appear here</p>
+          <p class="placeholder-sub">Paste a job posting and click Analyze</p>
+        </div>
+
+        <div class="result-content hidden" id="resultContent">
+          <!-- Threat Meter -->
+          <div class="threat-section">
+            <div class="threat-header">
+              <span class="threat-label">THREAT LEVEL</span>
+              <span class="threat-badge" id="threatBadge">—</span>
+            </div>
+            <div class="meter-track">
+              <div class="meter-fill" id="meterFill"></div>
+            </div>
+            <div class="meter-labels">
+              <span>SAFE</span><span>SUSPICIOUS</span><span>SCAM</span>
+            </div>
+            <div class="threat-score-row">
+              <span class="threat-score-label">Scam Probability</span>
+              <span class="threat-score-value" id="threatScore">—</span>
+            </div>
+          </div>
+
+          <!-- Verdict -->
+          <div class="verdict-box" id="verdictBox">
+            <div class="verdict-icon" id="verdictIcon">—</div>
+            <div class="verdict-text">
+              <div class="verdict-title" id="verdictTitle">Analyzing...</div>
+              <div class="verdict-desc" id="verdictDesc"></div>
+            </div>
+          </div>
+
+          <!-- Flags -->
+          <div class="flags-section">
+            <div class="flags-header">
+              <span>🚩 Red Flags Detected</span>
+              <span class="flags-count" id="flagsCount">0</span>
+            </div>
+            <div class="flags-list" id="flagsList"></div>
+          </div>
+
+          <!-- Good Signals -->
+          <div class="signals-section" id="signalsSection">
+            <div class="flags-header">
+              <span>✅ Positive Signals</span>
+              <span class="flags-count green" id="signalsCount">0</span>
+            </div>
+            <div class="flags-list" id="signalsList"></div>
+          </div>
+
+          <!-- AI Insight -->
+          <div class="insight-section">
+            <div class="insight-label">🤖 AI Insight</div>
+            <div class="insight-text" id="insightText"></div>
+          </div>
+
+          <!-- Action -->
+          <div class="action-section" id="actionSection"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-brand">⬡ JobGuard<span class="accent">AI</span></div>
+    <p>Built to protect job seekers from scams. Share this with someone job hunting.</p>
+    <div class="footer-share">
+      <button onclick="shareLinkedIn()" class="share-btn linkedin">Share on LinkedIn</button>
+      <button onclick="copyLink()" class="share-btn copy" id="copyBtn">📋 Copy Link</button>
+    </div>
+    <p class="footer-note">Powered by Claude AI · For educational & demo purposes</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
