@@ -1,9 +1,8 @@
 /* ============================================
    JOBGUARD AI — app.js
-   Handles: Claude API, UI logic, examples
+   API calls go to /.netlify/functions/analyze
+   (Never call Anthropic directly from browser)
    ============================================ */
-
-// ── EXAMPLE JOB POSTINGS ─────────────────────────────────────────────────────
 
 const EXAMPLES = {
   scam: `Job Title: Work From Home Data Entry Specialist - URGENT HIRING
@@ -26,8 +25,6 @@ Requirements:
 
 Salary: $25-$50 per hour guaranteed! Weekly payments directly to your bank!
 
-Benefits: Work from ANYWHERE in the world! Be your own boss!
-
 TO APPLY: Do NOT apply through this website. Send your full name, home address, date of birth, and bank account details to: globalopportunities.hiring@gmail.com or WhatsApp: +1 (555) 234-5678
 
 HURRY! Only 5 spots remaining! Must start immediately. We will send you a check for $2000 to purchase your equipment - just send back the remainder after buying.
@@ -44,70 +41,99 @@ About Stripe:
 Stripe is a financial infrastructure platform for businesses. We build the economic infrastructure of the internet, giving millions of companies the tools to start, run, and scale their businesses.
 
 About the Role:
-We're looking for a Backend Platform Engineer to join our core infrastructure team. You'll work on distributed systems that process millions of transactions daily. This is a high-impact role where your work will directly influence Stripe's reliability and performance at scale.
+We're looking for a Backend Platform Engineer to join our core infrastructure team.
 
 What You'll Do:
 - Design and build highly available distributed services in Go and Ruby
 - Improve our infrastructure reliability, scalability, and performance
 - Partner with product teams to create APIs and internal platforms
 - Conduct code reviews and contribute to engineering best practices
-- Participate in on-call rotations to ensure system reliability
 
 Who We're Looking For:
 - 3+ years of backend software engineering experience
 - Experience with distributed systems and microservices architecture
 - Proficiency in Go, Ruby, Java, or Python
 - Strong understanding of database design (SQL and NoSQL)
-- Experience with cloud infrastructure (AWS/GCP/Azure)
-
-Nice to Have:
-- Experience with Kubernetes or container orchestration
-- Open source contributions
-- Financial services background
 
 Compensation: $175,000 - $235,000 base salary + equity + benefits
 - Medical, dental, and vision insurance
 - 401(k) with company matching
 - Parental leave
-- Annual learning budget
 
-To Apply: Submit your application through careers.stripe.com/jobs/12345
-No third-party recruiters please.`,
+To Apply: Submit your application through careers.stripe.com/jobs/12345`,
 
   suspicious: `Remote Customer Success Manager
 
 Company: TechVentures Solutions
-Location: Fully Remote - Worldwide
+Location: Fully Remote
 
-We are a growing B2B SaaS startup looking for motivated individuals to join our customer success team!
-
-About Us: TechVentures Solutions provides cloud-based business optimization software to SMBs globally. Founded in 2021, we are growing rapidly and looking to scale our team.
+We are a growing B2B SaaS startup looking for motivated individuals!
 
 Responsibilities:
 - Onboard new clients and ensure successful product adoption
 - Manage a portfolio of 50-100 accounts
-- Conduct QBRs and upsell conversations
-- Provide product feedback to our development team
+- Conduct upsell conversations
 
 Requirements:
-- 1-3 years of customer success or account management experience
+- 1-3 years of customer success experience
 - Excellent communication skills
-- Self-motivated and able to work independently
-- CRM experience preferred (Salesforce, HubSpot)
-- Available for meetings between 9AM-6PM EST
+- CRM experience preferred
 
-Compensation: $45,000 - $75,000 (depends on experience) + commission
+Compensation: $45,000 - $75,000 + commission
 - Health insurance after 90 days
-- Paid time off
 - Fully remote
 
 How to Apply: Email your resume to: hiring@techventures-solutions.net
-Please include "CSM Application" in the subject line.
 
-Note: We move fast! Candidates who apply today may receive an offer within 48 hours. We look forward to working with you!`
+Note: We move fast! Candidates who apply today may receive an offer within 48 hours!`
 };
 
-// ── UTILITY FUNCTIONS ─────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are JobGuard AI, an expert system for detecting fake, fraudulent, or suspicious job postings. Analyze the provided job posting and return ONLY a valid JSON object with this exact structure (no markdown, no explanation, just raw JSON):
+
+{
+  "scam_probability": <number 0-100>,
+  "verdict": "<SAFE|SUSPICIOUS|SCAM>",
+  "verdict_title": "<short title>",
+  "verdict_description": "<2-3 sentence explanation>",
+  "red_flags": [
+    {
+      "title": "<flag name>",
+      "detail": "<specific explanation>",
+      "severity": "<HIGH|MEDIUM|LOW>"
+    }
+  ],
+  "positive_signals": [
+    {
+      "title": "<signal name>",
+      "detail": "<specific explanation>"
+    }
+  ],
+  "ai_insight": "<3-5 sentence detailed insight for job seekers about this specific posting>"
+}
+
+SCORING: 0-30 = SAFE, 31-65 = SUSPICIOUS, 66-100 = SCAM
+
+RED FLAGS TO CHECK:
+- Email from free providers (gmail/yahoo/hotmail) used as company contact
+- Requests for bank account, SSN, DOB, home address upfront
+- Vague or unverifiable company identity
+- No experience needed + high salary claims
+- Request to forward packages or process payments through personal account
+- Urgency tactics (limited spots, apply today, immediate hiring)
+- Confidentiality requests about the job
+- Check/overpayment scam patterns
+- WhatsApp/Telegram only contact, no official channels
+- Unrealistically high pay for simple tasks
+- Poor grammar or overly generic descriptions
+
+POSITIVE SIGNALS:
+- Official company domain email
+- Verifiable well-known company
+- Realistic salary range for the role
+- Clear specific job responsibilities
+- Apply through official career portals
+- Standard benefits mentioned (401k, health insurance)
+- Specific team or department named`;
 
 function updateCharCount() {
   const text = document.getElementById('jobInput').value;
@@ -118,12 +144,11 @@ function loadExample(type) {
   const textarea = document.getElementById('jobInput');
   textarea.value = EXAMPLES[type];
   updateCharCount();
-  textarea.scrollTop = 0;
 }
 
 function shareLinkedIn() {
   const url = encodeURIComponent(window.location.href);
-  const text = encodeURIComponent("🛡️ Built an AI that detects fake job listings using NLP + pattern detection!\n\nFresh grads: always scan a job posting before you apply. 1 in 7 online jobs are scams.\n\nTry it free 👇");
+  const text = encodeURIComponent("Built an AI that detects fake job listings using NLP + pattern detection. 1 in 7 online jobs are scams. Try it free:");
   window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}&summary=${text}`, '_blank');
 }
 
@@ -135,31 +160,24 @@ function copyLink() {
   });
 }
 
-// ── MAIN ANALYSIS FUNCTION ────────────────────────────────────────────────────
-
 async function analyzeJob() {
   const jobText = document.getElementById('jobInput').value.trim();
-
   if (!jobText || jobText.length < 50) {
     alert('Please paste a job description (at least 50 characters) to analyze.');
     return;
   }
 
-  // ── UI: Start loading state ──
   const scanBtn = document.getElementById('scanBtn');
   const scanBtnText = document.getElementById('scanBtnText');
   scanBtn.disabled = true;
   scanBtnText.textContent = '🔍 Scanning...';
 
-  // Show result panel, hide placeholder
   document.getElementById('resultPlaceholder').classList.add('hidden');
   document.getElementById('resultContent').classList.remove('hidden');
 
-  // Animate meter to scanning state
   const meterFill = document.getElementById('meterFill');
   meterFill.className = 'meter-fill suspicious scan-anim';
   meterFill.style.width = '40%';
-
   setThreatBadge('suspicious', 'SCANNING...');
   document.getElementById('threatScore').textContent = '—';
   document.getElementById('threatScore').className = 'threat-score-value';
@@ -169,101 +187,25 @@ async function analyzeJob() {
   document.getElementById('verdictIcon').textContent = '🔍';
   document.getElementById('flagsList').innerHTML = '<div class="flag-item loading-pulse"><span>Detecting patterns...</span></div>';
   document.getElementById('signalsList').innerHTML = '';
-  document.getElementById('insightText').textContent = 'Please wait while the AI analyzes this posting...';
+  document.getElementById('insightText').textContent = 'Please wait...';
   document.getElementById('actionSection').innerHTML = '';
   document.getElementById('flagsCount').textContent = '...';
   document.getElementById('signalsCount').textContent = '...';
 
-  // ── CLAUDE API CALL ──
-  const systemPrompt = `You are JobGuard AI, an expert system for detecting fake, fraudulent, or suspicious job postings. You have deep expertise in:
-1. NLP analysis of job posting language patterns
-2. Company legitimacy validation techniques
-3. Common job scam patterns and red flags
-4. Legitimate job posting characteristics
-
-Analyze the provided job posting and return ONLY a valid JSON object with this exact structure (no markdown, no explanation, just JSON):
-
-{
-  "scam_probability": <number 0-100>,
-  "verdict": "<SAFE|SUSPICIOUS|SCAM>",
-  "verdict_title": "<short title like 'Likely Legitimate Posting' or 'HIGH SCAM RISK'>",
-  "verdict_description": "<2-3 sentence explanation of your overall assessment>",
-  "red_flags": [
-    {
-      "title": "<flag name>",
-      "detail": "<specific explanation of why this is a red flag in this posting>",
-      "severity": "<HIGH|MEDIUM|LOW>"
-    }
-  ],
-  "positive_signals": [
-    {
-      "title": "<signal name>",
-      "detail": "<specific explanation of why this is a positive signal>"
-    }
-  ],
-  "ai_insight": "<3-5 sentence detailed insight paragraph for job seekers about this specific posting. Be specific, cite details from the posting. Give actionable advice.>",
-  "recommended_actions": [
-    "<action verb + short instruction>"
-  ]
-}
-
-SCORING GUIDE:
-- 0-30: SAFE - Appears to be a legitimate posting
-- 31-65: SUSPICIOUS - Has some red flags, needs verification
-- 66-100: SCAM - High likelihood of being fraudulent
-
-RED FLAGS TO CHECK (examine each carefully):
-- Email addresses from free providers (gmail, yahoo, hotmail) for company contact
-- Requests for personal/financial info upfront (SSN, bank account, DOB)
-- Vague company identity or hard to verify online
-- "No experience needed" + high salary claims
-- Request to forward packages, process payments through personal account
-- "Work from home" with unusual financial tasks
-- Urgency tactics ("limited spots", "apply today", "immediate hiring")
-- Confidentiality requests about the job opportunity
-- Check/overpayment scam patterns (sending check, buying equipment)
-- Salary that seems unrealistically high for the role
-- Recruiter uses only WhatsApp/Telegram, no official channels
-- Poor grammar or generic descriptions
-- No specific company information, location, or registration details
-- Application via external unofficial channels only
-
-POSITIVE SIGNALS:
-- Official company domain email
-- Verifiable company (public company, known brand)
-- Specific salary range that matches industry standards
-- Clear job responsibilities and requirements
-- Apply through official career portals
-- Mentions of standard benefits (401k, health insurance)
-- Specific team/department mentioned
-- No unusual requests
-- Professional job description language
-- LinkedIn, official website references`;
-
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": "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",
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-iab": "true"
-      },
+    // Calls YOUR Netlify function — not Anthropic directly
+    const response = await fetch('/.netlify/functions/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [
-          {
-            role: "user",
-            content: `Please analyze this job posting for scam indicators:\n\n---\n${jobText}\n---`
-          }
-        ]
+        jobText: jobText,
+        systemPrompt: SYSTEM_PROMPT
       })
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server error: ${response.status}`);
     }
 
     const data = await response.json();
@@ -272,14 +214,12 @@ POSITIVE SIGNALS:
       .map(b => b.text)
       .join('');
 
-    // Parse JSON — strip any accidental markdown fences
     const clean = rawText.replace(/```json|```/g, '').trim();
     const result = JSON.parse(clean);
-
     renderResult(result);
 
   } catch (err) {
-    console.error('Analysis failed:', err);
+    console.error('Analysis error:', err);
     renderError(err.message);
   } finally {
     scanBtn.disabled = false;
@@ -287,23 +227,15 @@ POSITIVE SIGNALS:
   }
 }
 
-// ── RENDER RESULT ─────────────────────────────────────────────────────────────
-
 function renderResult(result) {
   const prob  = Math.max(0, Math.min(100, result.scam_probability || 0));
-  const level = result.verdict?.toUpperCase() === 'SCAM' ? 'scam'
-              : result.verdict?.toUpperCase() === 'SUSPICIOUS' ? 'suspicious'
-              : 'safe';
+  const level = result.verdict === 'SCAM' ? 'scam' : result.verdict === 'SUSPICIOUS' ? 'suspicious' : 'safe';
 
-  // ── Threat Meter ──
   const meterFill = document.getElementById('meterFill');
   meterFill.classList.remove('scan-anim');
   meterFill.className = `meter-fill ${level}`;
-
-  // Small delay so user sees the meter animate in
   setTimeout(() => { meterFill.style.width = `${prob}%`; }, 100);
 
-  // Badge + Score
   const badgeText = level === 'safe' ? '✅ SAFE' : level === 'suspicious' ? '⚠️ SUSPICIOUS' : '🚨 SCAM';
   setThreatBadge(level, badgeText);
 
@@ -311,25 +243,16 @@ function renderResult(result) {
   scoreEl.textContent = `${prob}%`;
   scoreEl.className = `threat-score-value ${level}`;
 
-  // ── Verdict ──
-  const verdictBox   = document.getElementById('verdictBox');
-  const verdictIcon  = document.getElementById('verdictIcon');
-  const verdictTitle = document.getElementById('verdictTitle');
-  const verdictDesc  = document.getElementById('verdictDesc');
+  document.getElementById('verdictBox').className = `verdict-box ${level}`;
+  document.getElementById('verdictIcon').textContent = level === 'safe' ? '✅' : level === 'suspicious' ? '⚠️' : '🚨';
+  document.getElementById('verdictTitle').textContent = result.verdict_title || 'Analysis Complete';
+  document.getElementById('verdictDesc').textContent  = result.verdict_description || '';
 
-  verdictBox.className = `verdict-box ${level}`;
-  verdictIcon.textContent = level === 'safe' ? '✅' : level === 'suspicious' ? '⚠️' : '🚨';
-  verdictTitle.textContent = result.verdict_title || 'Analysis Complete';
-  verdictDesc.textContent  = result.verdict_description || '';
-
-  // ── Red Flags ──
   const flags = result.red_flags || [];
   document.getElementById('flagsCount').textContent = flags.length;
-  const flagsList = document.getElementById('flagsList');
-  if (flags.length === 0) {
-    flagsList.innerHTML = '<div style="font-size:13px;color:var(--slate);padding:8px 0">No major red flags detected.</div>';
-  } else {
-    flagsList.innerHTML = flags.map(f => `
+  document.getElementById('flagsList').innerHTML = flags.length === 0
+    ? '<div style="font-size:13px;color:var(--slate);padding:8px 0">No major red flags detected.</div>'
+    : flags.map(f => `
       <div class="flag-item">
         <span class="flag-icon">${f.severity === 'HIGH' ? '🔴' : f.severity === 'MEDIUM' ? '🟡' : '🔵'}</span>
         <div class="flag-text">
@@ -337,16 +260,12 @@ function renderResult(result) {
           <div class="flag-detail">${escapeHTML(f.detail)}</div>
         </div>
       </div>`).join('');
-  }
 
-  // ── Positive Signals ──
   const signals = result.positive_signals || [];
   document.getElementById('signalsCount').textContent = signals.length;
-  const signalsList = document.getElementById('signalsList');
-  if (signals.length === 0) {
-    signalsList.innerHTML = '<div style="font-size:13px;color:var(--slate);padding:8px 0">No strong positive signals detected.</div>';
-  } else {
-    signalsList.innerHTML = signals.map(s => `
+  document.getElementById('signalsList').innerHTML = signals.length === 0
+    ? '<div style="font-size:13px;color:var(--slate);padding:8px 0">No strong positive signals detected.</div>'
+    : signals.map(s => `
       <div class="signal-item">
         <span class="signal-icon">✅</span>
         <div class="signal-text">
@@ -354,30 +273,20 @@ function renderResult(result) {
           <div class="signal-detail">${escapeHTML(s.detail)}</div>
         </div>
       </div>`).join('');
-  }
 
-  // ── AI Insight ──
   document.getElementById('insightText').textContent = result.ai_insight || '';
 
-  // ── Action Buttons ──
-  const actions = result.recommended_actions || [];
   const actionSection = document.getElementById('actionSection');
   if (level === 'scam') {
     actionSection.innerHTML = `
-      <button class="action-btn danger" onclick="reportScam()">🚨 Report This Scam</button>
+      <button class="action-btn danger" onclick="window.open('https://reportfraud.ftc.gov/','_blank')">🚨 Report This Scam</button>
       <button class="action-btn secondary" onclick="analyzeNew()">↩ Analyze Another</button>`;
-  } else if (level === 'suspicious') {
-    actionSection.innerHTML = `
-      <button class="action-btn primary" onclick="analyzeNew()">🔍 Scan Another Job</button>
-      <button class="action-btn secondary" onclick="copyReport(${JSON.stringify(result).replace(/"/g, '&quot;')})">📋 Copy Report</button>`;
   } else {
     actionSection.innerHTML = `
       <button class="action-btn primary" onclick="analyzeNew()">🔍 Scan Another Job</button>
       <button class="action-btn secondary" onclick="shareLinkedIn()">📤 Share JobGuard</button>`;
   }
 }
-
-// ── RENDER ERROR ──────────────────────────────────────────────────────────────
 
 function renderError(msg) {
   const meterFill = document.getElementById('meterFill');
@@ -388,16 +297,21 @@ function renderError(msg) {
   document.getElementById('verdictBox').className = 'verdict-box suspicious';
   document.getElementById('verdictIcon').textContent = '⚠️';
   document.getElementById('verdictTitle').textContent = 'Analysis Failed';
-  document.getElementById('verdictDesc').textContent = 'Could not complete the analysis. Please check your connection and try again.';
-  document.getElementById('flagsList').innerHTML = `<div class="flag-item"><span class="flag-icon">🔴</span><div class="flag-text"><div class="flag-title">Error</div><div class="flag-detail">${escapeHTML(msg)}</div></div></div>`;
+  document.getElementById('verdictDesc').textContent = 'Could not reach the AI server. See details below.';
+  document.getElementById('flagsList').innerHTML = `
+    <div class="flag-item">
+      <span class="flag-icon">🔴</span>
+      <div class="flag-text">
+        <div class="flag-title">Error Details</div>
+        <div class="flag-detail">${escapeHTML(msg)}</div>
+      </div>
+    </div>`;
   document.getElementById('signalsList').innerHTML = '';
-  document.getElementById('insightText').textContent = 'The AI analysis service encountered an error. This may be a temporary issue. Please try again.';
-  document.getElementById('actionSection').innerHTML = `<button class="action-btn secondary" onclick="analyzeJob()">↩ Retry Analysis</button>`;
+  document.getElementById('insightText').textContent = 'This error means the serverless function is not reachable. Make sure you deployed to Netlify (not GitHub Pages) and added your ANTHROPIC_API_KEY environment variable.';
+  document.getElementById('actionSection').innerHTML = `<button class="action-btn secondary" onclick="analyzeJob()">↩ Retry</button>`;
   document.getElementById('flagsCount').textContent = '!';
   document.getElementById('signalsCount').textContent = '0';
 }
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
 
 function setThreatBadge(level, text) {
   const badge = document.getElementById('threatBadge');
@@ -406,12 +320,7 @@ function setThreatBadge(level, text) {
 }
 
 function escapeHTML(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function analyzeNew() {
@@ -420,43 +329,12 @@ function analyzeNew() {
   document.getElementById('resultContent').classList.add('hidden');
   document.getElementById('resultPlaceholder').classList.remove('hidden');
   document.getElementById('jobInput').focus();
-  window.scrollTo({ top: document.getElementById('demo').offsetTop - 80, behavior: 'smooth' });
 }
 
-function reportScam() {
-  window.open('https://reportfraud.ftc.gov/', '_blank');
-}
-
-function copyReport(result) {
-  const text = `JobGuard AI Analysis Report
----------------------------
-Verdict: ${result.verdict}
-Scam Probability: ${result.scam_probability}%
-
-${result.verdict_title}
-${result.verdict_description}
-
-Red Flags (${result.red_flags?.length || 0}):
-${(result.red_flags || []).map(f => `• ${f.title}: ${f.detail}`).join('\n')}
-
-Positive Signals (${result.positive_signals?.length || 0}):
-${(result.positive_signals || []).map(s => `• ${s.title}: ${s.detail}`).join('\n')}
-
-AI Insight: ${result.ai_insight}
-
-Analyzed by JobGuard AI`;
-  navigator.clipboard.writeText(text).then(() => alert('Report copied to clipboard!'));
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-
-// Smooth scroll for nav links
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
   anchor.addEventListener('click', function(e) {
     e.preventDefault();
     const target = document.querySelector(this.getAttribute('href'));
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
   });
 });
-
-console.log('%c⬡ JobGuard AI Loaded', 'color:#3D8EFF;font-weight:bold;font-size:14px');
